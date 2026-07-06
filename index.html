@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<title>My Love</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; overflow: hidden;
+    background: #05060a;
+    width: 100%; height: 100%;
+  }
+  canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: block;
+  }
+  #bg   { z-index: 1; }
+  #fg   { z-index: 2; }
+  #hint {
+    position: fixed;
+    bottom: 18px; width: 100%;
+    text-align: center;
+    color: rgba(255,255,255,0.25);
+    font-family: monospace;
+    font-size: 12px;
+    z-index: 3;
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<canvas id="fg"></canvas>
+<div id="hint">tap / click screen to restart</div>
+
+<script>
+
+const SEQUENCE = [
+  { type: "count", value: "3", hold: 900 },
+  { type: "count", value: "2", hold: 900 },
+  { type: "count", value: "1", hold: 900 },
+  { type: "word",  value: "You",  hold: 1400 },
+  { type: "word",  value: "Are",  hold: 1400 },
+  { type: "word",  value: "My",   hold: 1400 },
+  { type: "word",  value: "Love", hold: 1400 },
+  { type: "heart", value: "I Love You Aahana ❤️", hold: 2200 }
+];
+
+/* ---------------- Background matrix rain ---------------- */
+const bg = document.getElementById('bg');
+const bctx = bg.getContext('2d');
+const glyphChars = "LOVEUvelou♥".split("");
+
+let cols, drops;
+function setupRain() {
+  bg.width = innerWidth; bg.height = innerHeight;
+  const fontSize = 16;
+  cols = Math.floor(bg.width / fontSize);
+  drops = new Array(cols).fill(0).map(() => Math.random() * -50);
+}
+setupRain();
+
+function drawRain() {
+  bctx.fillStyle = "rgba(5,6,10,0.15)";
+  bctx.fillRect(0, 0, bg.width, bg.height);
+
+  const fontSize = 16;
+  bctx.font = fontSize + "px monospace";
+
+  for (let i = 0; i < cols; i++) {
+    const ch = glyphChars[Math.floor(Math.random() * glyphChars.length)];
+    const x = i * fontSize;
+    const y = drops[i] * fontSize;
+
+    if (ch === "♥") {
+      bctx.fillStyle = "rgba(255,60,140,0.9)";
+    } else {
+      const alpha = 0.25 + Math.random() * 0.5;
+      bctx.fillStyle = `rgba(255,120,170,${alpha})`;
+    }
+    bctx.fillText(ch, x, y);
+
+    if (y > bg.height && Math.random() > 0.975) {
+      drops[i] = 0;
+    }
+    drops[i] += 0.6 + Math.random() * 0.4;
+  }
+  requestAnimationFrame(drawRain);
+}
+drawRain();
+
+/* ---------------- Foreground dot-matrix engine ---------------- */
+const fg = document.getElementById('fg');
+const fctx = fg.getContext('2d');
+function resizeFg() { fg.width = innerWidth; fg.height = innerHeight; }
+resizeFg();
+
+// sample a text string into a grid of dot positions
+function sampleTextDots(text, fontSize, step) {
+  const off = document.createElement('canvas');
+  off.width = fg.width; off.height = fg.height;
+  const octx = off.getContext('2d');
+  octx.fillStyle = "#fff";
+  octx.font = `bold ${fontSize}px Arial, sans-serif`;
+  octx.textAlign = "center";
+  octx.textBaseline = "middle";
+  octx.fillText(text, off.width / 2, off.height / 2);
+
+  const data = octx.getImageData(0, 0, off.width, off.height).data;
+  const dots = [];
+  for (let y = 0; y < off.height; y += step) {
+    for (let x = 0; x < off.width; x += step) {
+      const idx = (y * off.width + x) * 4 + 3; // alpha channel
+      if (data[idx] > 100) dots.push({ x, y });
+    }
+  }
+  return dots;
+}
+
+// sample a parametric heart outline into dot positions
+function sampleHeartDots(scale, count) {
+  const dots = [];
+  const cx = fg.width / 2, cy = fg.height / 2 - 20;
+  for (let i = 0; i < count; i++) {
+    const t = (i / count) * Math.PI * 2;
+    const x = 16 * Math.pow(Math.sin(t), 3);
+    const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+    // jitter for a "filled" fluffy look
+    for (let j = 0; j < 3; j++) {
+      const jitter = (Math.random() - 0.5) * 6;
+      dots.push({
+        x: cx + (x + jitter) * scale,
+        y: cy + (y + jitter) * scale
+      });
+    }
+  }
+  return dots;
+}
+
+function fadeClear() {
+  fctx.clearRect(0, 0, fg.width, fg.height);
+}
+
+function drawDots(dots, radius, color, progress) {
+  const visibleCount = Math.floor(dots.length * progress);
+  fctx.fillStyle = color;
+  for (let i = 0; i < visibleCount; i++) {
+    const d = dots[i];
+    fctx.beginPath();
+    fctx.arc(d.x, d.y, radius, 0, Math.PI * 2);
+    fctx.fill();
+  }
+}
+
+/* animate a set of dots appearing, then hold, then it's cleared by caller */
+function animateDots(dots, radius, color, holdMs) {
+  return new Promise(resolve => {
+    const appearMs = Math.min(600, holdMs * 0.4);
+    const start = performance.now();
+
+    function frame(now) {
+      const elapsed = now - start;
+      fadeClear();
+
+      if (elapsed < appearMs) {
+        const progress = elapsed / appearMs;
+        drawDots(dots, radius, color, progress);
+        requestAnimationFrame(frame);
+      } else if (elapsed < holdMs) {
+        drawDots(dots, radius, color, 1);
+        requestAnimationFrame(frame);
+      } else {
+        fadeClear();
+        resolve();
+      }
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+/* extra: write small text label inside the heart slide */
+function drawHeartLabel(text) {
+  fctx.fillStyle = "rgba(255,90,150,0.95)";
+  fctx.font = "bold 20px Arial, sans-serif";
+  fctx.textAlign = "center";
+  fctx.textBaseline = "middle";
+  fctx.fillText(text, fg.width / 2, fg.height / 2 - 20);
+}
+
+/* ---------------- Sequence runner ---------------- */
+let running = false;
+
+async function runSequence() {
+  if (running) return;
+  running = true;
+
+  for (const step of SEQUENCE) {
+    if (step.type === "count") {
+      const dots = sampleTextDots(step.value, 260, 6);
+      await animateDots(dots, 3.2, "#fdf6e3", step.hold);
+
+    } else if (step.type === "word") {
+      const fontSize = step.value.length > 3 ? 130 : 170;
+      const dots = sampleTextDots(step.value, fontSize, 6);
+      await animateDots(dots, 3, "#fdf6e3", step.hold);
+
+    } else if (step.type === "heart") {
+      const dots = sampleHeartDots(14, 260);
+      const appearMs = Math.min(700, step.hold * 0.4);
+      const start = performance.now();
+      await new Promise(resolve => {
+        function frame(now) {
+          const elapsed = now - start;
+          fadeClear();
+          if (elapsed < appearMs) {
+            drawDots(dots, 3, "rgba(255,60,140,0.9)", elapsed / appearMs);
+          } else {
+            drawDots(dots, 3, "rgba(255,60,140,0.9)", 1);
+            drawHeartLabel(step.value);
+          }
+          if (elapsed < step.hold) {
+            requestAnimationFrame(frame);
+          } else {
+            fadeClear();
+            resolve();
+          }
+        }
+        requestAnimationFrame(frame);
+      });
+    }
+  }
+
+  running = false;
+}
+
+window.addEventListener('resize', () => { setupRain(); resizeFg(); });
+window.addEventListener('click', runSequence);
+window.addEventListener('touchstart', runSequence);
+
+// auto start once
+runSequence();
+</script>
+</body>
+</html>
