@@ -2,7 +2,7 @@
 <html lang="hi">
 <head>
 <meta charset="UTF-8">
-<title>My Love</title>
+<title>My Love Code</title>
 <style>
   html, body {
     margin: 0; padding: 0; overflow: hidden;
@@ -33,7 +33,18 @@
 <canvas id="bg"></canvas>
 <canvas id="fg"></canvas>
 
+<div>
+<audio autoplay loop id="Audio" style="display:none;">
+    <source src="Yiruma, River Flows in You.mp3" type="audio/mp3" autoplay>
+</audio>
+</div>
+
 <script>
+
+document.addEventListener("click", ()=>{
+  document.getElementById("Audio").play();
+}, {once:true});
+  
 
 const SEQUENCE = [
   { type: "count", value: "3", hold: 900 },
@@ -43,10 +54,9 @@ const SEQUENCE = [
   { type: "word",  value: "Are",  hold: 1400 },
   { type: "word",  value: "My",   hold: 1400 },
   { type: "word",  value: "Love", hold: 1400 },
-  { type: "heart", value: "I Love You Aahana ❤️", hold: Infinity }
+  { type: "heart", value: "I Love You Aahana❤️ ", hold: Infinity }
 ];
 
-/* ---------------- Background matrix rain ---------------- */
 const bg = document.getElementById('bg');
 const bctx = bg.getContext('2d');
 const glyphChars = "LOVEUvelou♥".split("");
@@ -89,13 +99,13 @@ function drawRain() {
 }
 drawRain();
 
-/* ---------------- Foreground dot-matrix engine ---------------- */
+
 const fg = document.getElementById('fg');
 const fctx = fg.getContext('2d');
 function resizeFg() { fg.width = innerWidth; fg.height = innerHeight; }
 resizeFg();
 
-// sample a text string into a grid of dot positions
+
 function sampleTextDots(text, fontSize, step) {
   const off = document.createElement('canvas');
   off.width = fg.width; off.height = fg.height;
@@ -110,31 +120,69 @@ function sampleTextDots(text, fontSize, step) {
   const dots = [];
   for (let y = 0; y < off.height; y += step) {
     for (let x = 0; x < off.width; x += step) {
-      const idx = (y * off.width + x) * 4 + 3; // alpha channel
+      const idx = (y * off.width + x) * 4 + 3; 
       if (data[idx] > 100) dots.push({ x, y });
     }
   }
   return dots;
 }
 
-// sample a parametric heart outline into dot positions
 function sampleHeartDots(scale, count) {
   const dots = [];
   const cx = fg.width / 2, cy = fg.height / 2 - 20;
+  const palette = [
+    "255,45,110",   
+    "255,90,150",   
+    "255,150,190",  
+    "255,190,215"   
+  ];
+  const layers = 5; 
+
   for (let i = 0; i < count; i++) {
     const t = (i / count) * Math.PI * 2;
-    const x = 16 * Math.pow(Math.sin(t), 3);
-    const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
-    // jitter for a "filled" fluffy look
-    for (let j = 0; j < 3; j++) {
-      const jitter = (Math.random() - 0.5) * 6;
+    const bx = 16 * Math.pow(Math.sin(t), 3);
+    const by = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+
+    for (let l = 0; l < layers; l++) {
+      
+      const radial = 0.82 + Math.random() * 0.34; 
+      const microX = (Math.random() - 0.5) * 1.2;
+      const microY = (Math.random() - 0.5) * 1.2;
+
+      const px = bx * radial + microX;
+      const py = by * radial + microY;
+
+      const rgb = palette[Math.floor(Math.random() * palette.length)];
+      const alpha = (0.5 + Math.random() * 0.45).toFixed(2);
+      const radius = 1.6 + Math.random() * 2.8;
+
       dots.push({
-        x: cx + (x + jitter) * scale,
-        y: cy + (y + jitter) * scale
+        x: cx + px * scale,
+        y: cy + py * scale,
+        r: radius,
+        color: `rgba(${rgb},${alpha})`
       });
     }
   }
+
+  
+  for (let i = dots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [dots[i], dots[j]] = [dots[j], dots[i]];
+  }
   return dots;
+}
+
+
+function drawHeartDots(dots, progress) {
+  const visibleCount = Math.floor(dots.length * progress);
+  for (let i = 0; i < visibleCount; i++) {
+    const d = dots[i];
+    fctx.beginPath();
+    fctx.fillStyle = d.color;
+    fctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+    fctx.fill();
+  }
 }
 
 function fadeClear() {
@@ -152,7 +200,7 @@ function drawDots(dots, radius, color, progress) {
   }
 }
 
-/* animate a set of dots appearing, then hold, then it's cleared by caller */
+
 function animateDots(dots, radius, color, holdMs) {
   return new Promise(resolve => {
     const appearMs = Math.min(600, holdMs * 0.4);
@@ -178,16 +226,16 @@ function animateDots(dots, radius, color, holdMs) {
   });
 }
 
-/* extra: write small text label inside the heart slide */
+
 function drawHeartLabel(text) {
-  fctx.fillStyle = "rgba(255,90,150,0.95)";
-  fctx.font = "bold 20px Arial, sans-serif";
+  fctx.fillStyle = "rgba(255,255,255,0.95)";
+  fctx.font = "bold 40px Arial, sans-serif";
   fctx.textAlign = "center";
   fctx.textBaseline = "middle";
-  fctx.fillText(text, fg.width / 2, fg.height / 2 - 20);
+  fctx.fillText(text, fg.width / 2, fg.height / 2- 20);
 }
 
-/* ---------------- Sequence runner ---------------- */
+
 let running = false;
 
 async function runSequence() {
@@ -196,26 +244,26 @@ async function runSequence() {
 
   for (const step of SEQUENCE) {
     if (step.type === "count") {
-      const dots = sampleTextDots(step.value, 260, 6);
-      await animateDots(dots, 3.2, "#fdf6e3", step.hold);
+      const dots = sampleTextDots(step.value, 500, 6);
+      await animateDots(dots, 3.6, "#fdf6e3", step.hold);
 
     } else if (step.type === "word") {
-      const fontSize = step.value.length > 3 ? 130 : 170;
+      const fontSize = step.value.length > 3 ? 400 : 400;
       const dots = sampleTextDots(step.value, fontSize, 6);
-      await animateDots(dots, 3, "#fdf6e3", step.hold);
+      await animateDots(dots, 3.4, "#fdf6e3", step.hold);
 
     } else if (step.type === "heart") {
-      const dots = sampleHeartDots(14, 260);
-      const appearMs = Math.min(700, step.hold * 0.4);
+      const dots = sampleHeartDots(20, 540); 
+      const appearMs = Math.min(900, step.hold * 0.45);
       const start = performance.now();
       await new Promise(resolve => {
         function frame(now) {
           const elapsed = now - start;
           fadeClear();
           if (elapsed < appearMs) {
-            drawDots(dots, 3, "rgba(255,60,140,0.9)", elapsed / appearMs);
+            drawHeartDots(dots, elapsed / appearMs);
           } else {
-            drawDots(dots, 3, "rgba(255,60,140,0.9)", 1);
+            drawHeartDots(dots, 1);
             drawHeartLabel(step.value);
           }
           if (elapsed < step.hold) {
@@ -237,7 +285,7 @@ window.addEventListener('resize', () => { setupRain(); resizeFg(); });
 window.addEventListener('click', runSequence);
 window.addEventListener('touchstart', runSequence);
 
-// auto start once
+
 runSequence();
 </script>
 </body>
